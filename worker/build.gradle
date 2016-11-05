@@ -7,7 +7,6 @@
  * user guide available at https://docs.gradle.org/3.1/userguide/tutorial_java_projects.html
  */
 
-
 // Apply the java plugin to add support for Java
 apply plugin: 'java'
 
@@ -21,8 +20,10 @@ repositories {
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
 // In this section you declare the dependencies for your production and test code
-dependencies {
 
+
+dependencies {
+    compile files("${System.properties['java.home']}/../lib/tools.jar")
     compile 'org.slf4j:slf4j-api:1.7.21'
     compile 'org.apache.hadoop:hadoop-common:2.7.3'
     compile 'org.apache.hadoop:hadoop-yarn-client:2.7.3'

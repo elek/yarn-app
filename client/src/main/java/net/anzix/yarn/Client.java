@@ -2,7 +2,6 @@ package net.anzix.yarn;
 
 import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -11,26 +10,25 @@ import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse;
 import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.client.api.YarnClientApplication;
-import org.apache.hadoop.yarn.client.api.impl.YarnClientImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class Client {
     public static void main(String[] args) throws Exception {
-        new Client().run(args[0]);
+        new Client().run(args[0], args[1]);
     }
 
-    private void run(String host) throws Exception {
+    private void run(String yarnHost, String hdfsHost) throws Exception {
         YarnClient yarnClient = YarnClient.createYarnClient();
         Configuration configuration = new Configuration();
-        configuration.set("yarn.resourcemanager.hostname", host);
-        configuration.set("fs.default.name", "hdfs://" + host + ":9000");
+        configuration.set("yarn.resourcemanager.hostname", yarnHost);
+        configuration.set("fs.default.name", "hdfs://" + hdfsHost + ":9000");
         yarnClient.init(configuration);
         yarnClient.start();
 
@@ -65,7 +63,7 @@ public class Client {
         List<String> commands = ImmutableList.of(
                 ApplicationConstants.Environment.JAVA_HOME.$$() + "/bin/java" +
                         " -Xmx256m -cp " + classPathEnv + " net.anzix.yarn.ApplicationMaster " +
-                        host + " "
+                        yarnHost + " " + hdfsHost + " "
                         + "1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout "
                         + "2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");
 
