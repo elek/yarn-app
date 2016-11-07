@@ -11,21 +11,31 @@ import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterRespo
 import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
+import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.impl.NMClientAsyncImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
 
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
-public class ApplicationMaster implements AMRMClientAsync.CallbackHandler {
+public class ApplicationMaster implements AMRMClientAsync.CallbackHandler, NMClientAsync.CallbackHandler {
 
     private AMRMClientAsync<AMRMClient.ContainerRequest> amRMClient;
 
     private NMClientAsyncImpl nmClientAsync;
+
     private final Configuration conf;
+
+    private Map<NodeId, ContainerId> startedContainers = new ConcurrentHashMap<>();
+
+    private Executor executor = Executors.newSingleThreadExecutor();
 
     public static void main(String[] args) throws Exception {
         new ApplicationMaster(args[0], args[1]).run();
@@ -53,13 +63,6 @@ public class ApplicationMaster implements AMRMClientAsync.CallbackHandler {
         String appMasterHostname = NetUtils.getHostname();
         RegisterApplicationMasterResponse response = amRMClient.registerApplicationMaster(appMasterHostname, -1, "http://index.hu");
 
-        System.out.println(response.getQueue());
-        System.out.println("AHOJ");
-
-        for (int i = 0; i < 10; i++) {
-            requestContainer();
-            Thread.sleep(5000);
-        }
 
         Thread.sleep(650000);
         amRMClient.unregisterApplicationMaster(FinalApplicationStatus.SUCCEEDED, "ahoj", "http://hup.hu");
@@ -69,22 +72,6 @@ public class ApplicationMaster implements AMRMClientAsync.CallbackHandler {
 
     }
 
-    private void requestContainer() {
-        Priority priority = Records.newRecord(Priority.class);
-        priority.setPriority(0);
-        // Resource requirements for worker containers
-        Resource capability = Records.newRecord(Resource.class);
-        capability.setMemory(1024);
-        //capability.setVirtualCores(1);
-        AMRMClient.ContainerRequest containerReq = new AMRMClient.ContainerRequest(
-                capability,
-                null /* hosts String[] */,
-                null /* racks String [] */,
-                priority);
-
-
-        amRMClient.addContainerRequest(containerReq);
-    }
 
     @Override
     public void onContainersCompleted(List<ContainerStatus> statuses) {
@@ -109,23 +96,25 @@ public class ApplicationMaster implements AMRMClientAsync.CallbackHandler {
                 workerJar.setType(LocalResourceType.FILE);
                 workerJar.setVisibility(LocalResourceVisibility.APPLICATION);
 
-                localResources.put("worker.jar",workerJar);
+                localResources.put("worker.jar", workerJar);
 
                 Map<String, String> env = new HashMap<String, String>();
 
                 StringBuilder classPathEnv = new StringBuilder(ApplicationConstants.Environment.CLASSPATH.$$())
                         .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("worker.jar");
-                for (String c : conf.getStrings(
-                        YarnConfiguration.YARN_APPLICATION_CLASSPATH,
-                        YarnConfiguration.DEFAULT_YARN_CROSS_PLATFORM_APPLICATION_CLASSPATH)) {
+                for (String c : conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH, YarnConfiguration.DEFAULT_YARN_CROSS_PLATFORM_APPLICATION_CLASSPATH)) {
                     classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR);
                     classPathEnv.append(c.trim());
                 }
+                classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR);
+                classPathEnv.append(ApplicationConstants.Environment.JAVA_HOME.$$() + "/lib/tools.jar");
+                classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR);
+                classPathEnv.append(ApplicationConstants.Environment.JAVA_HOME.$$() + "/../lib/tools.jar");
+
 
                 List<String> commands = ImmutableList.of(
                         ApplicationConstants.Environment.JAVA_HOME.$$() + "/bin/java" +
                                 " -cp " + classPathEnv + " net.anzix.yarn.Worker -Xmx256m "
-
                                 + "1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout "
                                 + "2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");
 
@@ -146,7 +135,7 @@ public class ApplicationMaster implements AMRMClientAsync.CallbackHandler {
 
     @Override
     public void onNodesUpdated(List<NodeReport> updatedNodes) {
-
+        executor.execute(new StartMissingContainers(updatedNodes, startedContainers, amRMClient));
     }
 
     @Override
@@ -156,6 +145,36 @@ public class ApplicationMaster implements AMRMClientAsync.CallbackHandler {
 
     @Override
     public void onError(Throwable e) {
+
+    }
+
+    @Override
+    public void onContainerStarted(ContainerId containerId, Map<String, ByteBuffer> allServiceResponse) {
+
+    }
+
+    @Override
+    public void onContainerStatusReceived(ContainerId containerId, ContainerStatus containerStatus) {
+
+    }
+
+    @Override
+    public void onContainerStopped(ContainerId containerId) {
+
+    }
+
+    @Override
+    public void onStartContainerError(ContainerId containerId, Throwable t) {
+
+    }
+
+    @Override
+    public void onGetContainerStatusError(ContainerId containerId, Throwable t) {
+
+    }
+
+    @Override
+    public void onStopContainerError(ContainerId containerId, Throwable t) {
 
     }
 }
